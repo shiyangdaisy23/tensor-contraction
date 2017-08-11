@@ -1,0 +1,2 @@
+t_size	k_size	iter_max	time_1	time_2	time_3	time_4
+20	10	200	0.155952	0.150246	0.158116	0.000330217

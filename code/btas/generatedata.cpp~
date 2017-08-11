@@ -1,0 +1,122 @@
+#include <stdio.h>
+#include<iostream>
+#include<fstream>
+#include <random>
+#include "eigensource/eigen-eigen-07105f7124f9/Eigen/Eigen"
+using namespace Eigen;
+using namespace std;
+
+int main()
+{
+ 
+   const int I = 120;
+   const int J = 120;
+   const int K = 120;
+   const int Q = 20;const int P = 20; const int R = 20;
+  
+   float X[I*J*K];
+   for(int i=0; i<I*J*K; ++i){
+	   X[i] = rand()/(float)RAND_MAX;
+	   //cout << X[i] << endl;
+   }
+
+   cout << "Writing Tensor into dataX.txt:"<< endl;
+  ofstream fout("dataX120_20.txt",ios::out|ios::app);
+  for(int i = 0; i<I*J*K;i++)
+  {
+    fout<<X[i]<<'\t';
+  }
+  fout.close();
+  
+///////////////////////////////////////////////////////////////////////////////
+  MatrixXf X1 = MatrixXf::Random(I,J*K);
+   MatrixXf X2 = MatrixXf::Random(J,I*K);
+   MatrixXf X3 = MatrixXf::Random(K,I*J);
+    
+ for(int i = 0; i<I; ++i){
+     float slice[I*J];int m = 0;
+     for(int ii = 0; ii<I*J; ++ii){
+       slice[m] = float(X[I*J*i+ii]);
+       m++;
+     }
+     MatrixXf test1 =  Map<MatrixXf,0, Stride<I,1> >(slice,I,J,Stride<I,1>(I,1));
+     X1.block<I,J>(0,J*i) =  test1;
+} 
+
+   for(int i = 0; i<K; ++i){
+     float slice[I*J];int m = 0;
+     for(int ii = 0; ii<I*J; ++ii){
+       slice[m] = float(X[I*J*i+ii]);
+       m++;
+     }
+     MatrixXf test2 =  Map<MatrixXf,0, Stride<1,I> >(slice,J,I,Stride<1,I>(1,I));
+     X2.block<J,I>(0,I*i) =  test2;
+} 
+
+   for(int i = 0; i<J; ++i){
+     float slice[I*K];int m = 0;
+     for(int ii = 0; ii<K; ++ii){
+       for (int jj = 0; jj<I; ++jj){
+       slice[m] = float(X[I*i+I*J*ii+jj]);
+       m++;
+       }
+     }
+      MatrixXf test3 =  Map<MatrixXf,0, Stride<1,I> >(slice,K,I,Stride<1,I>(1,I));
+     X3.block<K,I>(0,I*i) =  test3;
+} 
+
+   /*initialize A1, A2, A3 */
+    MatrixXf A1 = MatrixXf::Zero(I,P);
+   MatrixXf A2 = MatrixXf::Zero(J,Q);
+   MatrixXf A3 = MatrixXf::Zero(K,R);
+   
+   JacobiSVD<MatrixXf> svd1(X1,ComputeThinU);
+   const Eigen::MatrixXf U1 = svd1.matrixU();
+   A1 = U1.block<I,P>(0,0);
+   
+   JacobiSVD<MatrixXf> svd2(X2,ComputeThinU);
+   const Eigen::MatrixXf U2 = svd2.matrixU();
+   A2 = U2.block<J,Q>(0,0);
+   
+   JacobiSVD<MatrixXf> svd3(X3,ComputeThinU);
+   const Eigen::MatrixXf U3 = svd3.matrixU();
+   A3 = U3.block<K,R>(0,0);
+   
+   float dataA1[I*P];
+   float dataA2[J*Q];
+   float dataA3[K*R];
+
+  cout << "Writing initial A1 into dataA1.txt:"<< endl;
+  ofstream foutA1("dataA1120_20.txt",ios::out|ios::app);
+  for(int i = 0; i<I;i++)
+  {	for(int j = 0; j<P;j++)
+	{
+       		foutA1<<A1(i,j)<<'\t';
+	}
+  }
+  foutA1.close();
+  cout << "Writing initial A2 into dataA2.txt:"<< endl; 
+ ofstream foutA2("dataA2120_20.txt",ios::out|ios::app);
+  for(int i = 0; i<J;i++)
+  {	for(int j = 0; j<Q;j++)
+	{
+       		foutA2<<A2(i,j)<<'\t';
+	}
+  }
+  foutA2.close();
+  cout << "Writing initial A3 into dataA3.txt:"<< endl;
+ ofstream foutA3("dataA3120_20.txt",ios::out|ios::app);
+  for(int i = 0; i<K;i++)
+  {	for(int j = 0; j<R;j++)
+	{
+       		foutA3<<A3(i,j)<<'\t';
+	}
+  }
+  foutA3.close();
+
+
+
+
+
+  return 0;
+}

@@ -1,0 +1,460 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <sys/time.h>
+#include <iostream>
+#include <fstream>
+#include <chrono>
+#include <omp.h>
+#include "mkl_trans.h"
+#include "cblas_batch_gemm.hpp"
+//#define DOM_DEBUG
+
+using namespace std;
+using namespace std::chrono;
+void print_mat(int I, int J, double *mat_ptr) // number of rows, columns, pointer to the column-major buffer
+{
+  int i, j;
+  for(i=0; i<I; i++) {
+    for(j=0; j<J; j++) printf("%lf ", *(mat_ptr+(j*I+i))); //printf("%2.1f ", *(mat_ptr+(j*I+i))); // use if decimal display precision needs to be specified
+    printf("\n");
+  }
+}
+
+void print_ten(int I, int J, int K, double *ten_ptr) // tensor
+{
+  int i, j, k;
+  for(k=0; k<K; k++) {
+    printf("Slice %d:\n", k);
+    for(i=0; i<I; i++) {
+      for(j=0; j<J; j++) printf("%lf ", *(ten_ptr+(k*I*J+j*I+i)));
+      printf("\n");
+    }
+  }
+}
+
+int main()
+{
+ 
+ high_resolution_clock::time_point t1;  
+high_resolution_clock::time_point t2;
+duration<double> time_span;  
+int M, N, P, K, t_size=2, i, dom_debug=1;
+  size_t sd = sizeof(double); // size of datatype used in gemm calls - single or double precision
+  double alpha = 1.0f, beta = 0.0f, *h_A, *h_B, *h_C, *h_tmp_B;
+  double time_11_b_p=0, time_11_b_n=0, time_11_f=0, time_12_b_p=0, time_12_b_n=0, time_21_b_p=0, time_21_b_n=0, time_21_f=0, time_22_b_p=0, time_22_b_n=0, time_13_b_p=0, time_13_geam=0, time_15_b_p=0, time_15_f=0, time_51_b_n=0, time_51_f=0, time_61_b_n=0, time_61_f=0;
+  ofstream fout("cpu_timing_serialmkl_paraopenmp_chrono.txt",ios::out|ios::app);
+  fout << "t_size" << '\t' << "time_11_b_p" << '\t' << "time_11_b_n" << '\t' << "time_11_f" << '\t' << "time_12_b_p" << '\t' << "time_12_b_n" << '\t' << "time_21_b_p" << '\t' << "time_21_b_n" << '\t' << "time_21_f" << '\t' << "time_22_b_p" << '\t' << "time_22_b_n" << '\t' << "time_13_b_p" << '\t' << "time_13_geam" << '\t' << "time_15_b_p" << '\t' << "time_15_f" << '\t' << "time_51_b_n" << '\t' << "time_51_f" << '\t' << "time_61_b_n" << '\t' << "time_61_f" << '\t';
+
+  fout << "time_11_pbyn" << '\t' << "time_11_nbyp" << '\t' << "time_12_pbyn" << '\t' << "time_12_nbyp" << '\t' << "time_21_pbyn" << '\t' << "time_21_nbyp" << '\t' << "time_22_pbyn" << '\t' << "time_22_nbyp" << '\t' << "time_11_fbyn" << '\t' << "time_11_nbyf" << '\t' << "time_11_fbyp" << '\t' << "time_11_pbyf" << '\t' << "time_21_fbyn" << '\t' << "time_21_nbyf" << '\t' << "time_21_fbyp" << '\t' << "time_21_pbyf" << '\t' << "time_15_fbyp" << '\t' << "time_15_pbyf" << '\t' << "time_51_fbyn" << '\t' << "time_51_nbyf" << '\t' << "time_61_fbyn" << '\t' << "time_61_nbyf" << '\t' << "time_13_trans_f" << '\t' << "time_13_trans_p" << '\t' << "time_13_trans_n" << '\n'; // time of fancy derivatives
+
+  #ifndef DOM_DEBUG
+    dom_debug = 0;
+    for(t_size=5; t_size<556; t_size++)
+  #endif
+  {
+    if(dom_debug){M=3; N=4; P=5; K=2;} else{M=t_size; N=t_size; P=t_size; K=t_size;}
+    printf("M=%d, N=%d, P=%d, K=%d\n", M, N, P, K);
+
+    h_A = (double*)malloc(M*K*sd); h_B = (double*)malloc(K*N*P*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<M*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*N*P; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 1.1 batch in p\n");
+     t1 =  high_resolution_clock::now();    
+     for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+		      M, N, K, alpha,
+		      h_A, M, 0,
+		      h_B, K, K*N, beta,
+		      h_C, M, M*N,
+		      P);
+    }
+     t2 =  high_resolution_clock::now(); 
+  time_span = duration_cast<duration<double>>(t2-t1);         
+     time_11_b_p = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(M*K*sd); h_B = (double*)malloc(K*N*P*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<M*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*N*P; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 1.1 batch in n\n");
+    t1 =  high_resolution_clock::now();    
+    for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+		      M, P, K, alpha,
+		      h_A, M, 0,
+		      h_B, K*N, K, beta,
+		      h_C, M*N, M,
+		      N);
+    }
+     t2 =  high_resolution_clock::now(); 
+     time_span = duration_cast<duration<double>>(t2-t1);         
+    time_11_b_n = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(M*K*sd); h_B = (double*)malloc(K*N*P*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<M*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*N*P; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 1.1 flat\n");
+    t1 =  high_resolution_clock::now();    
+    for(i=0;i<10;i++) {
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+		M, N*P, K, alpha,
+		h_A, M,
+		h_B, K, beta,
+		h_C, M);
+    }
+     t2 =  high_resolution_clock::now(); 
+  time_span = duration_cast<duration<double>>(t2-t1);         
+    time_11_f = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(M*K*sd); h_B = (double*)malloc(K*P*N*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<M*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*P*N; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 1.2 batch in p\n");
+     t1 =  high_resolution_clock::now();    
+     for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+		      M, N, K, alpha,
+		      h_A, M, 0,
+		      h_B, K*P, K, beta,
+		      h_C, M, M*N,
+		      P);
+    }
+     t2 =  high_resolution_clock::now(); 
+ time_span = duration_cast<duration<double>>(t2-t1);         
+    time_12_b_p = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(M*K*sd); h_B = (double*)malloc(K*P*N*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<M*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*P*N; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 1.2 batch in n\n");
+     t1 =  high_resolution_clock::now();    
+     for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+		      M, P, K, alpha,
+		      h_A, M, 0,
+		      h_B, K, K*P, beta,
+		      h_C, M*N, M,
+		      N);
+    }
+     t2 =  high_resolution_clock::now(); 
+    time_span = duration_cast<duration<double>>(t2-t1);         
+    time_12_b_n = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(K*M*sd); h_B = (double*)malloc(K*N*P*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<K*M; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*N*P; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 2.1 batch in p\n");
+    t1 =  high_resolution_clock::now();    
+    for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
+		      M, N, K, alpha,
+		      h_A, K, 0,
+		      h_B, K, K*N, beta,
+		      h_C, M, M*N,
+		      P);
+    }
+     t2 =  high_resolution_clock::now(); 
+    time_span = duration_cast<duration<double>>(t2-t1);         
+    time_21_b_p = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(K*M*sd); h_B = (double*)malloc(K*N*P*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<K*M; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*N*P; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 2.1 batch in n\n");
+    t1 =  high_resolution_clock::now();    
+    for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
+		      M, P, K, alpha,
+		      h_A, K, 0,
+		      h_B, K*N, K, beta,
+		      h_C, M*N, M,
+		      N);
+    }
+     t2 =  high_resolution_clock::now(); 
+    time_span = duration_cast<duration<double>>(t2-t1);         
+    time_21_b_n = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(K*M*sd); h_B = (double*)malloc(K*N*P*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<K*M; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*N*P; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 2.1 flat\n");
+    t1 =  high_resolution_clock::now();    
+    for(i=0;i<10;i++) {
+    cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
+		M, N*P, K, alpha,
+		h_A, K,
+		h_B, K, beta,
+		h_C, M);
+    }
+     t2 =  high_resolution_clock::now(); 
+     time_span = duration_cast<duration<double>>(t2-t1);         
+    time_21_f = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(K*M*sd); h_B = (double*)malloc(K*P*N*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<K*M; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*P*N; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 2.2 batch in p\n");
+    t1 =  high_resolution_clock::now();    
+    for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
+		      M, N, K, alpha,
+		      h_A, K, 0,
+		      h_B, K*P, K, beta,
+		      h_C, M, M*N,
+		      P);
+    }
+     t2 =  high_resolution_clock::now(); 
+     time_span = duration_cast<duration<double>>(t2-t1);         
+    time_22_b_p = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(K*M*sd); h_B = (double*)malloc(K*P*N*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<K*M; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*P*N; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 2.2 batch in n\n");
+     t1 =  high_resolution_clock::now();    
+     for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
+		      M, P, K, alpha,
+		      h_A, K, 0,
+		      h_B, K, K*P, beta,
+		      h_C, M*N, M,
+		      N);
+    }
+     t2 =  high_resolution_clock::now(); 
+ time_span = duration_cast<duration<double>>(t2-t1);         
+    time_22_b_n = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(M*K*sd); h_B = (double*)malloc(N*K*P*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    h_tmp_B = (double*)malloc(K*N*P*sd); // for btas transposes
+    for(i=0; i<M*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<N*K*P; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 1.3 batch in p\n");
+     t1 =  high_resolution_clock::now();    
+     for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
+		      M, N, K, alpha,
+		      h_A, M, 0,
+		      h_B, N, N*K, beta,
+		      h_C, M, M*N,
+		      P);
+    }
+     t2 =  high_resolution_clock::now(); 
+     time_span = duration_cast<duration<double>>(t2-t1);         
+    time_13_b_p = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    t1 =  high_resolution_clock::now();    
+    for(i=0;i<10;i++) {
+    for(int p=0; p<P; p++) // timing explicit transpose: btas-like
+      mkl_domatcopy('C', 'T', N, K, alpha, h_B+(N*K*p), N, h_tmp_B+(K*N*p), K);
+    }
+    t2 =  high_resolution_clock::now(); 
+    time_span = duration_cast<duration<double>>(t2-t1);         
+    time_13_geam = (double)time_span.count()/10*1000;
+    free(h_tmp_B);
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(M*K*sd); h_B = (double*)malloc(N*P*K*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<M*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<N*P*K; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 1.5 batch in p\n");
+    t1 =  high_resolution_clock::now();    
+    for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
+		      M, N, K, alpha,
+		      h_A, M, 0,
+		      h_B, N*P, N, beta,
+		      h_C, M, M*N,
+		      P);
+    }
+    t2 =  high_resolution_clock::now(); 
+     time_span = duration_cast<duration<double>>(t2-t1);         
+    time_15_b_p = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(M*K*sd); h_B = (double*)malloc(N*P*K*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<M*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<N*P*K; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 1.5 flat\n");
+     t1 =  high_resolution_clock::now();    
+     for(i=0;i<10;i++) {
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
+		M, N*P, K, alpha,
+		h_A, M,
+		h_B, N*P, beta,
+		h_C, M);
+    }
+   t2 =  high_resolution_clock::now(); 
+  time_span = duration_cast<duration<double>>(t2-t1);         
+    time_15_f = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(P*K*sd); h_B = (double*)malloc(K*M*N*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<P*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*M*N; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 5.1 batch in n\n");
+    t1 =  high_resolution_clock::now();    
+    for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasTrans, CblasTrans,
+		      M, P, K, alpha,
+		      h_B, K, K*M,
+		      h_A, P, 0, beta,
+		      h_C, M*N, M,
+		      N);
+    }
+     t2 =  high_resolution_clock::now(); 
+     time_span = duration_cast<duration<double>>(t2-t1);         
+    time_51_b_n = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(P*K*sd); h_B = (double*)malloc(K*M*N*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<P*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*M*N; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 5.1 flat\n");
+     t1 =  high_resolution_clock::now();    
+     for(i=0;i<10;i++) {
+    cblas_dgemm(CblasColMajor, CblasTrans, CblasTrans,
+		M*N, P, K, alpha,
+		h_B, K,
+		h_A, P, beta,
+		h_C, M*N);
+    }
+    t2 =  high_resolution_clock::now(); 
+    time_span = duration_cast<duration<double>>(t2-t1);         
+    time_51_f = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(K*P*sd); h_B = (double*)malloc(K*M*N*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<K*P; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*M*N; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 6.1 batch in n\n");
+    t1 =  high_resolution_clock::now();    
+    for(i=0;i<10;i++) {
+    cblas_batch_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
+		      M, P, K, alpha,
+		      h_B, K, K*M,
+		      h_A, K, 0, beta,
+		      h_C, M*N, M,
+		      N);
+    }
+     t2 =  high_resolution_clock::now(); 
+     time_span = duration_cast<duration<double>>(t2-t1);         
+    time_61_b_n = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    h_A = (double*)malloc(P*K*sd); h_B = (double*)malloc(K*M*N*sd); h_C = (double*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<P*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<K*M*N; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(double)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    if(dom_debug) printf("case 6.1 flat\n");
+     t1 =  high_resolution_clock::now();    
+     for(i=0;i<10;i++) {
+    cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
+		M*N, P, K, alpha,
+		h_B, K,
+		h_A, K, beta,
+		h_C, M*N);
+    }
+    t2 =  high_resolution_clock::now(); 
+     time_span = duration_cast<duration<double>>(t2-t1);         
+    time_61_f = (double)time_span.count()/10*1000;
+    if(dom_debug) {printf("C:\n"); print_ten(M,N,P,h_C);}
+    free(h_A); free(h_B); free(h_C);
+
+    fout << t_size << '\t' << time_11_b_p << '\t' << time_11_b_n << '\t' << time_11_f << '\t' << time_12_b_p << '\t' << time_12_b_n << '\t' << time_21_b_p << '\t' << time_21_b_n << '\t' << time_21_f << '\t' << time_22_b_p << '\t' << time_22_b_n << '\t' << time_13_b_p << '\t' << time_13_geam <<  '\t' << time_15_b_p << '\t' << time_15_f << '\t' << time_51_b_n << '\t' << time_51_f << '\t' << time_61_b_n << '\t' << time_61_f << '\t';
+
+    fout << time_11_b_p/time_11_b_n << '\t' << time_11_b_n/time_11_b_p << '\t' << time_12_b_p/time_12_b_n << '\t' << time_12_b_n/time_12_b_p << '\t' << time_21_b_p/time_21_b_n << '\t' << time_21_b_n/time_21_b_p << '\t' << time_22_b_p/time_22_b_n << '\t' << time_22_b_n/time_22_b_p << '\t' << time_11_f/time_11_b_n << '\t' << time_11_b_n/time_11_f << '\t' << time_11_f/time_11_b_p << '\t' << time_11_b_p/time_11_f << '\t' << time_21_f/time_21_b_n << '\t' << time_21_b_n/time_21_f << '\t' << time_21_f/time_21_b_p << '\t' << time_21_b_p/time_21_f << '\t' << time_15_f/time_15_b_p << '\t' << time_15_b_p/time_15_f << '\t' << time_51_f/time_51_b_n << '\t' << time_51_b_n/time_51_f << '\t' << time_61_f/time_61_b_n << '\t' << time_61_b_n/time_61_f << '\t' << time_13_geam+time_11_f << '\t' << time_13_geam+time_11_b_p << '\t' << time_13_geam+time_11_b_n << '\n'; // time of fancy derivatives
+  }
+  fout.close();
+  return(0);
+}
+
+
+
+/*
+    gettimeofday(&tv1, NULL);
+    //call mkl_dimatcopy(ordering, trans, rows, cols, alpha, ab, lda, ldb);
+    for(int p=0; p<P; p++)
+    {
+      mkl_domatcopy('C', 'T', N, K, alpha, B+(N*K*p), N, tmp_B+(K*N*p), K); // A^\top
+      //mkl_dimatcopy('C', 'T', N, K, alpha, B+(N*K*p), N, K); // A^\top
+    }
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+		M, N*P, K, alpha,
+		A, M,
+		tmp_B, K, beta,
+		Cg, M);
+    gettimeofday(&tv2, NULL);
+    
+    gettimeofday(&tv1, NULL);
+    for(int p=0; p<P; p++) // trans+batch n
+      mkl_domatcopy('C', 'T', N, K, alpha, B+(N*K*p), N, tmp_B+(K*N*p), K);
+    cblas_batch_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+		      M, N, K, alpha,
+		      A, M, 0,
+		      tmp_B, K, K*N, beta,
+		      Cg, M, M*N,
+		      P);
+    gettimeofday(&tv2, NULL);
+    
+    gettimeofday(&tv1, NULL);
+    for(int p=0; p<P; p++) // trans+batch p
+      mkl_domatcopy('C', 'T', N, K, alpha, B+(N*K*p), N, tmp_B+(K*N*p), K);
+    cblas_batch_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+		      M, N, K, alpha,
+		      A, M, 0,
+		      tmp_B, K, K*P, beta,
+		      Cg, M, M*P,
+		      N);
+    gettimeofday(&tv2, NULL);
+
+    gettimeofday(&tv1, NULL);
+    cblas_batch_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
+		      M, N, K, alpha,
+		      A, M, 0,
+		      B, N, K*N, beta,
+		      Cb, M, M*N,
+		      P);
+    gettimeofday(&tv2, NULL);
+ */

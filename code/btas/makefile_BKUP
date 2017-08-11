@@ -1,0 +1,15 @@
+CXX = g++
+INCLUDES = -I/home/yang/BTAS/
+BLAS_DIR = /opt/intel/mkl/include/lib/intel64/
+FLAGS = -std=c++11
+PROG = btas_test_1_01
+MKL_FLAGS = -Wl,--start-group $(BLAS_DIR)libmkl_intel_lp64.a $(BLAS_DIR)libmkl_core.a $(BLAS_DIR)libmkl_sequential.a $(BLAS_DIR)libmkl_intel_thread.a -Wl,--end-group -lpthread -lm
+
+btas_test_1_01: btas_test_1_01.cpp
+	$(CXX) $(INCLUDES) $(FLAGS) $(MKL_FLAGS) btas_test_1_01.cpp -o $(PROG)
+
+clean:
+	rm $(PROG) *.txt
+
+run:
+	nohup ./$(PROG) > out.txt & 

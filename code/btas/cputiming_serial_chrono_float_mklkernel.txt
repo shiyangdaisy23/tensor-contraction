@@ -1,0 +1,12 @@
+t_size	k_size	iter_max	time_1	time_2	time_3	time_4
+20	10	200	0.0308468	0.0043944	0.00565544	2.5225e-05
+t_size	k_size	iter_max	time_1	time_2	time_3	time_4
+30	10	200	0.0333943	0.0079713	0.0116934	5.0373e-05
+t_size	k_size	iter_max	time_1	time_2	time_3	time_4
+50	20	200	0.0652061	0.0578725	0.0793725	0.000375973
+t_size	k_size	iter_max	time_1	time_2	time_3	time_4
+70	20	200	0.177948	0.128792	0.17419	0.000808895
+t_size	k_size	iter_max	time_1	time_2	time_3	time_4
+100	20	200	0.328487	0.91201	0.552092	0.00265852
+t_size	k_size	iter_max	time_1	time_2	time_3	time_4
+120	20	200	0.511497	0.831459	0.791847	0.00391954

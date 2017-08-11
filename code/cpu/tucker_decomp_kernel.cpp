@@ -1,0 +1,263 @@
+// #include "eigensource/eigen-eigen-07105f7124f9/Eigen/Eigen"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <sys/time.h>
+#include <iostream>
+#include <fstream>
+#include <chrono>
+#include <omp.h>
+// #include "mkl_trans.h"
+#include "cblas_batch_gemm.hpp"
+using namespace std;
+using namespace Eigen;
+int main()
+{
+  int M, N, P, K;
+  size_t sd = sizeof(float); // size of datatype used in gemm calls - single or float precision
+  float alpha = 1.0f, beta = 0.0f, *h_A, *h_B, *h_C, *h_tmp_B;
+  M = 5; N = 5; K = 5; P = 3;
+h_A = (float*)malloc(M*K*sd); h_B = (float*)malloc(K*N*P*sd); h_C = (float*)malloc(M*N*P*sd); // host variables
+    for(i=0; i<M*K; ++i) if(dom_debug) h_A[i] = i+1; else h_A[i] = rand()/(float)RAND_MAX;
+    for(i=0; i<K*N*P; ++i) if(dom_debug) h_B[i] = i+1; else h_B[i] = rand()/(float)RAND_MAX;
+    for(i=0; i<M*N*P; ++i) h_C[i] = 0;
+    free(h_A);free(h_B); free(h_C);
+
+/*
+const int I = 3;
+   const int J = 4;
+   const int K = 5;
+   const int Q = 3;const int P = 2; const int R = 4;
+  
+   float X[I*J*K];size_t chars_read = 0;
+  for(int i=0; i<I*J*K; ++i){
+	   X[i] = rand()/(float)RAND_MAX;
+	   //cout << X[i] << endl;
+   }
+   float *X_pointer = X;
+   ifstream input("/home/yang/btas_test_2/dataX.txt");
+   while (input && chars_read <I*J*K)
+   {
+     input >> X[chars_read];
+     chars_read++;
+}
+   
+   Tensor<float> T(I,J,K); int idx = 0;
+   for(int k=0; k<K; k++){
+       for(int j=0;j<J;j++){
+           for(int i=0;i<I;i++){
+               T(i,j,k) = X[idx];
+               idx = idx+1;
+            }
+        }
+    }
+  //////////////////////////////////////////////////////////////////////////// 
+ ////////////////////////// Initial A1 A2 A3 ////////////////////////////////
+///////////////    T_IJK = [G_PQR;A1_IP,A2_JQ,A3_KR]  /////////////////////////
+ /////////////////////////////////////////////////////////////////////////////
+ /* reshape tensor T_IJK along different mode */
+/*  
+
+
+ MatrixXf X1 = MatrixXf::Random(I,J*K);
+   MatrixXf X2 = MatrixXf::Random(J,I*K);
+   MatrixXf X3 = MatrixXf::Random(K,I*J);
+    
+ for(int i = 0; i<I; ++i){
+     float slice[I*J];int m = 0;
+     for(int ii = 0; ii<I*J; ++ii){
+       slice[m] = float(X[I*J*i+ii]);
+       m++;
+     }
+     MatrixXf test1 =  Map<MatrixXf,0, Stride<I,1> >(slice,I,J,Stride<I,1>(I,1));
+     X1.block<I,J>(0,J*i) =  test1;
+} 
+
+   for(int i = 0; i<K; ++i){
+     float slice[I*J];int m = 0;
+     for(int ii = 0; ii<I*J; ++ii){
+       slice[m] = float(X[I*J*i+ii]);
+       m++;
+     }
+     MatrixXf test2 =  Map<MatrixXf,0, Stride<1,I> >(slice,J,I,Stride<1,I>(1,I));
+     X2.block<J,I>(0,I*i) =  test2;
+} 
+
+   for(int i = 0; i<J; ++i){
+     float slice[I*K];int m = 0;
+     for(int ii = 0; ii<K; ++ii){
+       for (int jj = 0; jj<I; ++jj){
+       slice[m] = float(X[I*i+I*J*ii+jj]);
+       m++;
+       }
+     }
+      MatrixXf test3 =  Map<MatrixXf,0, Stride<1,I> >(slice,K,I,Stride<1,I>(1,I));
+     X3.block<K,I>(0,I*i) =  test3;
+} 
+
+   /*initialize A1, A2, A3 */
+/* 
+
+  MatrixXf A1 = MatrixXf::Zero(I,P);
+   MatrixXf A2 = MatrixXf::Zero(J,Q);
+   MatrixXf A3 = MatrixXf::Zero(K,R);
+   
+   JacobiSVD<MatrixXf> svd1(X1,ComputeThinU);
+   const Eigen::MatrixXf U1 = svd1.matrixU();
+   A1 = U1.block<I,P>(0,0);
+   
+   JacobiSVD<MatrixXf> svd2(X2,ComputeThinU);
+   const Eigen::MatrixXf U2 = svd2.matrixU();
+   A2 = U2.block<J,Q>(0,0);
+   
+   JacobiSVD<MatrixXf> svd3(X3,ComputeThinU);
+   const Eigen::MatrixXf U3 = svd3.matrixU();
+   A3 = U3.block<K,R>(0,0);
+   cout << "Initial A1,A2,A3:" << endl;
+   cout << A1 << endl;
+   cout << A2 << endl;
+   cout << A3 << endl;
+   
+  ///////////////////////////////////////////////////////////////////////////// 
+  //////////////////////////////////////////////////////////////////////////////
+  //////////////////////////Using BTAS to do Tensor Contraction ////////////////////
+  MatrixXf Y1 = MatrixXf::Random(I,Q*R);
+  MatrixXf Y2 = MatrixXf::Random(J,P*R);
+  MatrixXf Y3 = MatrixXf::Random(K,P*Q);
+  float *Y1_eigen;
+  float *Y2_eigen;
+  float *Y3_eigen;
+  /////////////////// UPDATES ////////////////////////////////////////////////
+for (int iter = 0; iter <20; iter++){
+    cout << "iter no:" << iter <<endl;
+    ///////////////////////////////////////////////////////////////
+    /*    UPDATE A1    */ 
+ 
+/*
+
+   Y1_eigen = BTAS_Contract1(T,A2,A3,I,J,K,Q,R);
+	    for(int i = 0; i<I; ++i){
+        float slice[I*Q];int m = 0;
+            for(int ii = 0; ii<I*Q; ++ii){
+                slice[m] = float(Y1_eigen[I*Q*i+ii]);
+                m++;
+            }
+         MatrixXf test1 =  Map<MatrixXf,0, Stride<I,1> >(slice,I,Q,Stride<I,1>(I,1));
+         Y1.block<I,Q>(0,Q*i) =  test1;
+        } 
+// 	cout << "Y1 is:"<<endl; 
+	    //   cout << Y1 << endl;
+ 
+    JacobiSVD<MatrixXf> svda1(Y1,ComputeThinU);
+    const Eigen::MatrixXf Ua1 = svda1.matrixU();
+    A1 = Ua1.block<I,P>(0,0);
+    cout << "A1 IS:"<<endl;
+    cout << A1 << endl;
+////////////////////////////////////////////////////////////////////////////////////////////   
+     /*    UPDATE A2    */ 
+
+/*
+
+     Y2_eigen = BTAS_Contract2(T,A1,A3,I,J,K,P,R);
+	 for(int i = 0; i<R; ++i){
+         float slice[P*J];int m = 0;
+             for(int ii = 0; ii<P*J; ++ii){
+             slice[m] = float(Y2_eigen[P*J*i+ii]);
+             m++;
+             }
+         MatrixXf test2 =  Map<MatrixXf,0, Stride<1,P> >(slice,J,P,Stride<1,P>(1,P));
+         Y2.block<J,P>(0,P*i) =  test2;
+     } 
+// 	cout <<"Y2 is:"<<endl;  
+	 //   cout<< Y2 << endl;
+    JacobiSVD<MatrixXf> svda2(Y2,ComputeThinU);
+    const Eigen::MatrixXf Ua2 = svda2.matrixU();
+    A2 = Ua2.block<J,Q>(0,0);
+    cout << "A2 IS:"<<endl;
+    cout << A2 <<endl;
+/////////////////////////////////////////////////////////////////////////////////////////////
+ /*    UPDATE A3    */ 
+
+/*
+
+    Y3_eigen = BTAS_Contract3(T,A1,A2,I,J,K,P,Q);
+    for(int i = 0; i<Q; ++i){
+         float slice[P*K];int m = 0;
+         for(int ii = 0; ii<K; ++ii){
+             for (int jj = 0; jj<P; ++jj){
+                 slice[m] = float(Y3_eigen[P*i+P*Q*ii+jj]);
+                 m++;
+             }
+        }
+        MatrixXf test3 =  Map<MatrixXf,0, Stride<1,P> >(slice,K,P,Stride<1,P>(1,P));
+        Y3.block<K,P>(0,P*i) =  test3;
+    } 
+    //  cout << "Y3 IS:" << endl;    
+    //   cout<< Y3 << endl;
+
+   JacobiSVD<MatrixXf> svda3(Y3,ComputeThinU);
+   const Eigen::MatrixXf Ua3 = svda3.matrixU();
+   A3 = Ua3.block<K,R>(0,0);
+   cout <<"A3 IS:"<<endl;
+   cout << A3 <<endl;	
+	
+}
+ ///////////////////////////////////////////////////////////////////////
+///////////////////// UPDATE G //////////////////////////////////////// 
+ Tensor<float> A(I,P); 
+ for(int i=0; i<I; i++){
+    for(int j=0;j<P;j++){
+        A(i,j) = A1(i,j);
+    }
+}
+	
+Tensor<float> B(J,Q); 
+for(int i=0; i<J; i++){
+    for(int j=0;j<Q;j++){
+        B(i,j) = A2(i,j);
+    }
+}
+
+Tensor<float> C(K,R); 
+for(int i=0; i<K; i++){
+     for(int j=0;j<R;j++){
+        C(i,j) = A3(i,j);
+    }
+}
+	
+    float alpha = 1;
+    float beta = 0;
+	Tensor<float> Temp1(I,J,R);
+    Temp1.generate([](){ return randomReal<float>(); });
+	Tensor<float> Temp2(I,Q,R);
+    Temp2.generate([](){ return randomReal<float>(); });
+	
+	Tensor<float> G(P,Q,R);
+    G.generate([](){ return randomReal<float>(); });
+	contract(alpha,T,{'i','j','k'},C,{'k','r'},beta,Temp1,{'i','j','r'});
+    contract(alpha,Temp1,{'i','j','r'},B,{'j','q'},beta,Temp2,{'i','q','r'});
+	contract(alpha,Temp2,{'i','q','r'},A,{'i','p'},beta,G,{'p','q','r'});
+	cout<< "G is:"<<endl;	cout << G <<endl;	
+
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    return 0;
+}
+    

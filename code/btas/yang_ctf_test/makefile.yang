@@ -1,0 +1,8 @@
+BDIR =$(realpath $(CTF_BUILD_DIR))
+export BDIR
+include $(BDIR)/config.mk
+export FCXX
+export OFFLOAD_CXX
+export LIBS
+all:
+	g++ -o ccsdt_map_test ccsdt_map_test.cxx -I/usr/include/mpich-x86_64 --std=c++11 -L$(BDIR)/lib -lctf $(LIBS)

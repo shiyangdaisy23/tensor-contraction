@@ -1,0 +1,475 @@
+
+
+/*Copyright (c) 2011, Edgar Solomonik, all rights reserved.*/
+/** \addtogroup examples 
+  * @{ 
+  * \defgroupmulti_tsr_sym
+  * @{ 
+  * \brief Matrix multiplication
+  */
+
+#include <ctf.hpp>
+#include <fstream>
+#include <iostream>
+#include <stdio.h>
+#include "/home/yang/btas_test_2/eigensource/eigen-eigen-07105f7124f9/Eigen/Eigen"
+#include <sys/time.h>
+#include <chrono>
+
+using namespace CTF;
+using namespace std;
+using namespace std::chrono;
+float* Cyclops_Contract1(Tensor<float> T, Matrix<float> T2,Matrix<float> T3,const int I,const int K, const int Q,const int R,World & dw)
+{   
+	int64_t nvals;
+        int64_t * indices;
+        float * data;
+	
+   
+	int shapeTemp[] = {NS,NS,NS};
+	int sizeTemp[] = {I,Q,K};
+	Tensor<float>Temp(3,sizeTemp,shapeTemp,dw);
+	int shapeY[] = {NS,NS,NS};
+	int sizeY[] = {I,Q,R};
+	Tensor<float>Y(3,sizeY,shapeY,dw);
+	
+	Temp["iqk"] = T["ijk"]*T2["jq"];
+	Y["iqr"] = Temp["iqk"]*T3["kr"];
+  	
+	float Y_eigen[I*Q*R];
+	Y.read_local(&nvals, &indices, &data);
+	for(int i=0; i<(int)nvals; i++){
+            Y_eigen[i] = data[i];
+    }
+	 float *Y_eigen_pointer = Y_eigen;
+// 	free(indices);
+//	free(data);
+	  return Y_eigen_pointer;
+        //return Y_eigen;
+}
+
+float* Cyclops_Contract2(Tensor<float> T, Matrix<float> T1,Matrix<float> T3,const int J,const int K, const int P,const int R,World & dw)
+{   
+
+	int64_t nvals;
+	int64_t * indices;
+	float * data;
+	
+       
+	int shapeTemp[] = {NS,NS,NS};
+	int sizeTemp[] = {P,J,K};
+	Tensor<float>Temp(3,sizeTemp,shapeTemp,dw);
+	int shapeY[] = {NS,NS,NS};
+	int sizeY[] = {P,J,R};
+	Tensor<float>Y(3,sizeY,shapeY,dw);
+	
+	Temp["pjk"] = T["ijk"]*T1["ip"];
+	Y["pjr"] = Temp["pjk"]*T3["kr"];
+  	
+	float Y_eigen[P*J*R];
+	Y.read_local(&nvals, &indices, &data);
+	for(int i=0; i<(int)nvals; i++){
+            Y_eigen[i] = data[i];
+    }
+	//float *Y_eigen_pointer = Y_eigen;
+// 	free(indices);
+//	free(data);
+        return Y_eigen;
+}
+
+float* Cyclops_Contract3(Tensor<float> T, Matrix<float> T1,Matrix<float> T2, const int J,const int K, const int P,const int Q,World & dw)
+{   
+	int64_t nvals;
+	int64_t * indices;
+	float * data;
+	
+   
+	int shapeTemp[] = {NS,NS,NS};
+	int sizeTemp[] = {P,J,K};
+	Tensor<float>Temp(3,sizeTemp,shapeTemp,dw);
+	int shapeY[] = {NS,NS,NS};
+	int sizeY[] = {P,Q,K};
+	Tensor<float>Y(3,sizeY,shapeY,dw);
+	
+	Temp["pjk"] = T["ijk"]*T1["ip"];
+	Y["pqk"] = Temp["pjk"]*T2["jq"];
+  	
+	float Y_eigen[P*Q*K];
+	Y.read_local(&nvals, &indices, &data);
+	for(int i=0; i<(int)nvals; i++){
+            Y_eigen[i] = data[i];
+    }
+	// float *Y_eigen_pointer = Y_eigen;
+	// 	free(indices);
+	// free(data);
+  return Y_eigen;
+}
+
+
+
+int multi_tsr_sym_yang(int     m,
+                  int     n,
+                  World & dw)
+{
+  high_resolution_clock::time_point t1;
+ high_resolution_clock::time_point t2;  
+ duration<double> time_span;
+ float time_1 = 0, time_2 = 0, time_3 = 0, time_4 = 0;
+ ofstream fout("/home/yang/btas_test_2/cputiming_serial_chrono_float_ctf2.txt",ios::out|ios::app);
+ fout << "t_size" << '\t' <<"k_size" << '\t' <<"iter_max" << '\t' <<"time_1" << '\t' <<"time_2" << '\t' <<"time_3" << '\t' << "time_4" <<'\n';
+
+ int t_size = 120; int k_size = 10;
+ int iter_max = 200;
+ int const I = 120;
+ int const J = 120;
+ int const K = 120;
+ int const P = 10; int const Q = 10; int const R = 10;
+ 
+	int64_t * indices;
+  	int64_t nvals;
+  	float * data; 
+ 
+ cout <<"begin:" <<endl;
+///////////////////////////////////////////////////////////
+/////////////// Read data X///////////////////////////////
+////////// Initial Tensor T ///////////////////////////////
+
+ 
+ size_t chars_read = 0;
+ float X[I*J*K];
+ cout << "Read Tensor X:"<<endl;
+ ifstream input("/home/yang/btas_test_2/dataX120_10.txt");
+ while (input && chars_read < I*J*K)
+{
+  input >> X[chars_read];
+  chars_read++;
+}
+  
+ int shapeT[] = {NS,NS,NS};
+ int sizeT[] = {I,J,K};
+ Tensor<float>T(3,sizeT,shapeT,dw);
+ 
+ T.read_local(&nvals, &indices, &data);
+
+ for(int i = 0; i<nvals;i++){
+   data[i] = X[i];
+
+}
+ T.write(nvals,indices,data);
+///////////////////////////////////////////////////////////////
+////////////////////Read A1 /////////////////////////////////////
+ chars_read = 0;
+ float dataA1[I*P];
+ cout<<"Read initial A1:"<<endl;
+ ifstream inputA1("/home/yang/btas_test_2/dataA1120_10.txt");
+ while (inputA1 && chars_read < I*P)
+{
+  inputA1 >> dataA1[chars_read];
+  chars_read++;
+}
+  
+
+ Matrix<float>A1(I,P,NS,dw);
+ 
+ A1.read_local(&nvals, &indices, &data);
+
+ for(int i = 0; i<nvals;i++){
+   data[i] = dataA1[i];
+
+}
+ A1.write(nvals,indices,data);
+
+
+////////////////////////////////////////////////////////////////
+//////////////////// Read A2 /////////////////////////////////////
+ chars_read = 0;
+ float dataA2[J*Q];
+  cout<<"Read initial A2:"<<endl;
+ ifstream inputA2("/home/yang/btas_test_2/dataA2120_10.txt");
+ while (inputA2 && chars_read < J*Q)
+{
+  inputA2 >> dataA2[chars_read];
+  chars_read++;
+}
+  
+
+ Matrix<float>A2(J,Q,NS,dw);
+ 
+ A2.read_local(&nvals, &indices, &data);
+
+ for(int i = 0; i<nvals;i++){
+   data[i] = dataA2[i];
+
+}
+ A2.write(nvals,indices,data);
+
+///////////////////////////////////////////////////////////////////
+///////////////////Read A3 /////////////////////////////////////////
+ chars_read = 0;
+ float dataA3[K*R];
+  cout<<"Read initial A3:"<<endl;
+ ifstream inputA3("/home/yang/btas_test_2/dataA3120_10.txt");
+ while (inputA3 && chars_read < K*R)
+{
+  inputA3 >> dataA3[chars_read];
+  chars_read++;
+}
+  
+
+ Matrix<float>A3(K,R,NS,dw);
+ 
+ A3.read_local(&nvals, &indices, &data);
+
+ for(int i = 0; i<nvals;i++){
+   data[i] = dataA3[i];
+
+}
+ A3.write(nvals,indices,data);
+
+
+
+ 
+////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+
+ Eigen::MatrixXf Y1 = Eigen::MatrixXf::Random(I,Q*R);
+ Eigen::MatrixXf Y2 = Eigen::MatrixXf::Random(J,P*R);
+ Eigen::MatrixXf Y3 = Eigen::MatrixXf::Random(K,P*Q);
+ float * Y1_eigen;
+ float * Y2_eigen;
+ float * Y3_eigen;
+ cout<<"Updata begin:"<<endl;
+for(int iter = 0; iter <iter_max; iter++)
+{
+  cout << "iter no:" << iter <<endl;
+  ///////////////////////////////////////////////////
+  /*updata A1 */
+  cout<<"Update A1:"<<endl;
+  t1 = high_resolution_clock::now();
+ 
+  cout <<"good1"<<endl;
+  for (int i = 1; i<2; i++)
+  {   
+    int64_t nvals;
+    int64_t * indices;
+    float * data;
+	
+    
+    int shapeTemp[] = {NS,NS,NS};
+    int sizeTemp[] = {I,Q,K};
+    Tensor<float>Temp(3,sizeTemp,shapeTemp,dw);
+    int shapeY[] = {NS,NS,NS};
+    int sizeY[] = {I,Q,R};
+    Tensor<float>Y(3,sizeY,shapeY,dw);
+    cout <<"good2"<<endl;
+    Temp["iqk"] = T["ijk"]*A2["jq"];
+    Y["iqr"] = Temp["iqk"]*A3["kr"];
+    cout <<"good3"<<endl;
+    float Y_eigen[I*Q*R];
+    Y.read_local(&nvals, &indices, &data);
+    for(int i=0; i<(int)nvals; i++){
+      Y_eigen[i] = data[i];
+    }
+ cout <<"good4"<<endl;
+  Y1_eigen = Y_eigen;
+
+  }
+
+
+
+	 // Y1_eigen = Cyclops_Contract1(T,A2,A3,I,K,Q,R,dw);
+  t2 = high_resolution_clock::now();
+  time_span = duration_cast<duration<double>>(t2-t1);
+  time_1 += (float)time_span.count();
+  cout<<"good5"<<endl;
+  for(int i = 0; i<R; ++i){
+    float slice[I*Q];int m = 0;
+    for(int ii = 0; ii<I*Q; ++ii){
+      slice[m] = float(Y1_eigen[I*Q*i+ii]);
+      m++;
+    }
+    Eigen::MatrixXf test1 =  Eigen::Map<Eigen::MatrixXf,0, Eigen::Stride<I,1> >(slice,I,Q,Eigen::Stride<I,1>(I,1));
+    Y1.block<I,Q>(0,Q*i) =  test1;
+  } 
+
+cout <<"good6"<<endl;
+  Eigen::JacobiSVD<Eigen::MatrixXf> svda1(Y1,Eigen::ComputeThinU);
+  const Eigen::MatrixXf Ua1 = svda1.matrixU();
+  Eigen::MatrixXf Eigen_A1 = Ua1.block<I,P>(0,0);
+//  cout<< Eigen_A1 << endl;
+cout <<"good7"<<endl;
+  A1.read_local(&nvals, &indices, &data);
+cout <<"good77"<<endl;
+  int idx = 0;
+  for(int i = 0; i<I;i++){
+    for(int j = 0; j<P;j++){
+      data[idx] = Eigen_A1(i,j);
+      idx++;
+    }
+  }
+cout <<"good8"<<endl;
+  A1.write(nvals,indices,data);
+  cout << "good9"<<endl;
+  //////////////////////////////////////////////////
+  /*update A2 */
+  cout<<"Update A2:"<<endl;
+ t1 = high_resolution_clock::now();
+ cout <<"good10" <<endl;
+  Y2_eigen = Cyclops_Contract2(T,A1,A3,J,K,P,R,dw);
+   t2 = high_resolution_clock::now();
+  time_span = duration_cast<duration<double>>(t2-t1);
+  time_2 += (float)time_span.count();
+
+
+  for(int i = 0; i<R; ++i){
+    float slice[P*J];int m = 0;
+    for(int ii = 0; ii<P*J; ++ii){
+      slice[m] = float(Y2_eigen[P*J*i+ii]);
+      m++;
+    }
+    Eigen::MatrixXf test2 =  Eigen::Map<Eigen::MatrixXf,0, Eigen::Stride<1,P> >(slice,J,P,Eigen::Stride<1,P>(1,P));
+    Y2.block<J,P>(0,P*i) =  test2;
+  } 
+
+  Eigen::JacobiSVD<Eigen::MatrixXf> svda2(Y2,Eigen::ComputeThinU);
+  const Eigen::MatrixXf Ua2 = svda2.matrixU();
+  Eigen::MatrixXf Eigen_A2 = Ua2.block<J,Q>(0,0);
+  //  cout<< Eigen_A2 << endl;  
+  A2.read_local(&nvals, &indices, &data);
+  idx = 0;
+  for(int i = 0; i<J;i++){
+    for(int j = 0; j<Q;j++){
+      data[idx] = Eigen_A2(i,j);
+      idx++;
+    }
+  }
+  A2.write(nvals,indices,data);
+////////////////////////////////////////////////////////////////
+/* update A3  */
+  cout<<"Update A3:"<<endl;
+ t1 = high_resolution_clock::now();
+  Y3_eigen = Cyclops_Contract3(T,A1,A2,J,K,P,Q,dw);
+ t2 = high_resolution_clock::now();
+  time_span = duration_cast<duration<double>>(t2-t1);
+  time_3 += (float)time_span.count();
+
+  for(int i = 0; i<Q; ++i){
+    float slice[P*K];int m = 0;
+    for(int ii = 0; ii<K; ++ii){
+      for (int jj = 0; jj<P; ++jj){
+	slice[m] = float(Y3_eigen[P*i+P*Q*ii+jj]);
+	m++;
+      }
+    }
+    Eigen::MatrixXf test3 =  Eigen::Map<Eigen::MatrixXf,0, Eigen::Stride<1,P> >(slice,K,P,Eigen::Stride<1,P>(1,P));
+    Y3.block<K,P>(0,P*i) =  test3;
+  } 
+ 
+  Eigen::JacobiSVD<Eigen::MatrixXf> svda3(Y3,Eigen::ComputeThinU);
+  const Eigen::MatrixXf Ua3 = svda3.matrixU();
+  Eigen::MatrixXf Eigen_A3 = Ua3.block<K,R>(0,0);
+  //  cout<< Eigen_A3 << endl;
+  A3.read_local(&nvals, &indices, &data);
+  idx = 0;
+  for(int i = 0; i<K;i++){
+    for(int j = 0; j<R;j++){
+      data[idx] = Eigen_A3(i,j);
+      idx++;
+    }
+  }
+  A3.write(nvals,indices,data);
+  //  cout<< "A3 is:"<<endl;
+  //  for (int i = 0; i < nvals; i++)
+  //  cout << data[i] << endl;
+	
+} 
+
+// cout << "Hello"<< endl;
+//////////////////////////////////////////////////////
+///////////////// update G //////////////////////////
+  cout<<"Update G:"<<endl;
+int shapeTemp1[] = {NS,NS,NS};
+int sizeTemp1[] = {I,J,R};
+Tensor<float>Temp1(3,sizeTemp1,shapeTemp1,dw);
+int shapeTemp2[] = {NS,NS,NS};
+int sizeTemp2[] = {I,Q,R};
+Tensor<float>Temp2(3,sizeTemp2,shapeTemp2,dw);
+
+int shapeG[] = {NS,NS,NS};
+int sizeG[] = {P,Q,R};
+Tensor<float>G(3,sizeG,shapeG,dw);
+
+ t1 = high_resolution_clock::now();	
+Temp1["ijr"] = T["ijk"]*A3["kr"];
+Temp2["iqr"] = Temp1["ijr"]*A2["jq"];
+G["pqr"] = Temp2["iqr"]*A1["ip"];
+ t2 = high_resolution_clock::now();
+  time_span = duration_cast<duration<double>>(t2-t1);
+  time_4 = (float)time_span.count();
+
+  	
+cout << "finish!"<<endl;
+
+
+
+
+// free(indices);
+// free(data);
+
+
+fout << t_size <<'\t'<<k_size << '\t' << iter_max <<'\t' << time_1 << '\t'<< time_2 <<'\t' << time_3 << '\t' << time_4 <<'\n';
+fout.close(); 
+
+
+
+
+ return 1;
+} 
+
+
+#ifndef TEST_SUITE
+char* getCmdOption(char ** begin,
+                   char ** end,
+                   const   std::string & option){
+  char ** itr = std::find(begin, end, option);
+  if (itr != end && ++itr != end){
+    return *itr;
+  }
+  return 0;
+}
+
+int main(int argc, char ** argv){
+  int rank, np, n, m, pass;
+  int in_num = argc;
+  char ** input_str = argv;
+
+  MPI_Init(&argc, &argv);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &np);
+
+  
+  {
+    World dw(MPI_COMM_WORLD, argc, argv);
+   
+	int rank, i, num_pes;
+  
+  
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
+
+ 
+      m = 6; n = 6;
+     pass = multi_tsr_sym_yang(m,n,dw);
+      assert(pass);
+  }
+
+  MPI_Finalize();
+  return 0;
+}
+/**
+ * @} 
+ * @}
+ */
+
+
+#endif

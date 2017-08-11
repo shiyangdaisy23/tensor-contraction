@@ -1,0 +1,69 @@
+#pragma once
+
+#include <cassert>
+
+//-- BLAST_DEBUG_OUT ---------------------------------------------------------
+#ifdef BLAST_DEBUG
+# include <iostream>
+# ifndef BLAST_DEBUG_OUT
+#  define BLAST_DEBUG_OUT(msg)    std::cerr << "BLAST: " << msg << std::endl
+#  define BLAST_DEBUG_OUT_2(msg)  std::cerr << msg << std::endl
+# endif // BLAST_DEBUG_OUT
+#else
+# ifndef BLAST_DEBUG_OUT
+#  define BLAST_DEBUG_OUT(msg)
+#  define BLAST_DEBUG_OUT_2(msg)
+# endif // BLAST_DEBUG_OUT
+#endif // BLAST_DEBUG
+
+// XXX: Move to typedef.h?
+
+namespace blast
+{
+
+enum StorageOrder {
+  ColMajor = 0,
+  RowMajor = 1
+};
+
+enum Transpose {
+  NoTrans   = 0,
+  Conj      = 1,
+  Trans     = 2,
+  ConjTrans = 3
+};
+
+} // end namespace blast
+
+
+// XXX: Move to complex.h?
+
+#include <complex>
+
+namespace blast
+{
+
+// User could potentially define ComplexFloat/ComplexDouble instead of thrust::
+#ifndef BLAST_COMPLEX_TYPES
+#define BLAST_COMPLEX_TYPES 1
+template <typename T>
+using complex       = std::complex<T>;
+using ComplexFloat  = complex<float>;
+using ComplexDouble = complex<double>;
+#endif // BLAST_COMPLEX_TYPES
+
+//__host__ __device__
+float
+conj(const float& x)
+{
+  return x;
+}
+
+//__host__ __device__
+double
+conj(const double& x)
+{
+  return x;
+}
+
+} // end namespace blast

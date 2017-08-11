@@ -1,0 +1,26 @@
+TARGETS = matrixmul
+
+all: $(TARGETS)
+
+#=======================================================================
+CXX = g++ 
+CXXFLAGS = -Wall -O3
+
+#=======================================================================
+BLAS_DIR = /opt/intel/mkl
+# BLAS_INC = -I$(BLAS_DIR)/include
+BLAS_LIBS = -Wl,--start-group $(BLAS_DIR)/lib/intel64/libmkl_intel_lp64.a $(BLAS_DIR)/lib/intel64/libmkl_intel_thread.a $(BLAS_DIR)/lib/intel64/libmkl_core.a -Wl,--end-group -L"/opt/intel/composer_xe_2015.2.164/compiler/lib/intel64/" -liomp5 -lpthread -ldl -lm
+
+MISC = -fopenmp -funroll-loops -Wextra
+
+INCLUDES = $(BLAS_INC)
+LIBS = $(BLAS_LIBS) 
+
+matrixmul: test.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $< $(LIBS) -o $@
+
+#=======================================================================
+clean:
+	rm -rf *~ $(TARGETS) $(CLEANFILES) *.txt
+
+#=======================================================================

@@ -1,0 +1,478 @@
+//#include "Eigen/Eigen"
+#include "eigensource/eigen-eigen-07105f7124f9/Eigen/Eigen"
+#include "btas/tensor.h"
+#include "btas/tensor_func.h"
+#include "btas/generic/contract.h"
+#include <random>
+#include <chrono>
+#include <fstream>
+using namespace Eigen;
+using namespace btas;
+using namespace std;
+//typedef std::chrono::high_resolution_clock Clock;
+
+/*
+template <typename T>
+std::ostream& 
+operator<<(std::ostream& s, const Tensor<T>& X)
+{
+  for(auto i : X.range()) s << i << " " << X(i) << "\n";
+  return s;
+}
+*/
+template <typename T>
+T
+randomReal()
+{
+  static std::mt19937 rng(time(NULL)); // std::time(NULL) replaced
+  static auto dist = std::uniform_real_distribution<T>{0., 1.};
+  return dist(rng);
+}
+
+
+float* BTAS_Contract1(Tensor<float> T, MatrixXf A2,MatrixXf A3,const int I,const int J,const int K, const int Q,const int R)
+{   
+  /* Tensor<float> T(I,J,K); int idx = 0;
+   for(int i=0; i<I; i++){
+       for(int j=0;j<J;j++){
+           for(int k=0;k<K;k++){
+               T(i,j,k) = X[idx];
+               idx = idx+1;
+            }
+        }
+    }
+  */
+	 Tensor<float> T2(J,Q); 
+   for(int i=0; i<J; i++){
+       for(int j=0;j<Q;j++){
+               T2(i,j) = A2(i,j);
+        }
+    }
+   
+   	 Tensor<float> T3(K,R); 
+   for(int i=0; i<K; i++){
+       for(int j=0;j<R;j++){
+            T3(i,j) = A3(i,j);
+        }
+    }
+		
+	float alpha = 1;
+    float beta = 0; 
+	Tensor<float> Temp(I,Q,K);
+    Temp.generate([](){ return randomReal<float>(); });
+	Tensor<float> Y(I,Q,R);
+    Y.generate([](){ return randomReal<float>(); });
+	contract(alpha,T,{'i','j','k'},T2,{'j','q'},beta,Temp,{'i','q','k'});
+    contract(alpha,Temp,{'i','q','k'},T3,{'k','r'},beta,Y,{'i','q','r'});
+	float Y_eigen[I*Q*R]; int idx =0;
+	for(int i=0; i<I; i++){
+       for(int j=0;j<Q;j++){
+	       for(int k = 0; k<R; k++){
+            Y_eigen[idx] = Y(i,j,k);
+            idx = idx+1;
+            }
+		}
+    }
+	float *Y_eigen_pointer = Y_eigen;
+  return Y_eigen_pointer;
+}
+
+float* BTAS_Contract2(Tensor<float> T,MatrixXf A1,MatrixXf A3,const int I,const int J,const int K, const int P,const int R)
+{   
+  /* Tensor<float> T(I,J,K); int idx = 0;
+   for(int i=0; i<I; i++){
+       for(int j=0;j<J;j++){
+           for(int k=0;k<K;k++){
+               T(i,j,k) = X[idx];
+               idx = idx+1;
+            }
+        }
+    }
+  */
+	 Tensor<float> T1(I,P); 
+   for(int i=0; i<I; i++){
+       for(int j=0;j<P;j++){
+               T1(i,j) = A1(i,j);
+        }
+    }
+   
+   	 Tensor<float> T3(K,R); 
+   for(int i=0; i<K; i++){
+       for(int j=0;j<R;j++){
+            T3(i,j) = A3(i,j);
+        }
+    }
+		
+	float alpha = 1;
+    float beta = 0; 
+	Tensor<float> Temp(P,J,K);
+    Temp.generate([](){ return randomReal<float>(); });
+	Tensor<float> Y(P,J,R);
+    Y.generate([](){ return randomReal<float>(); });
+	contract(alpha,T,{'i','j','k'},T1,{'i','p'},beta,Temp,{'p','j','k'});
+    contract(alpha,Temp,{'p','j','k'},T3,{'k','r'},beta,Y,{'p','j','r'});
+	float Y_eigen[P*J*R]; int idx =0;
+	for(int i=0; i<P; i++){
+       for(int j=0;j<J;j++){
+	       for(int k = 0; k<R; k++){
+            Y_eigen[idx] = Y(i,j,k);
+            idx = idx+1;
+            }
+		}
+    }
+	float *Y_eigen_pointer = Y_eigen;
+  return Y_eigen_pointer;
+}
+
+float* BTAS_Contract3(Tensor<float> T,MatrixXf A1,MatrixXf A2,const int I,const int J,const int K, const int P,const int Q)
+{   
+  /* Tensor<float> T(I,J,K); int idx = 0;
+   for(int i=0; i<I; i++){
+       for(int j=0;j<J;j++){
+           for(int k=0;k<K;k++){
+               T(i,j,k) = X[idx];
+               idx = idx+1;
+            }
+        }
+    }
+  */	
+	 Tensor<float> T2(J,Q); 
+   for(int i=0; i<J; i++){
+       for(int j=0;j<Q;j++){
+               T2(i,j) = A2(i,j);
+        }
+    }
+   
+   	 Tensor<float> T1(I,P); 
+   for(int i=0; i<I; i++){
+       for(int j=0;j<P;j++){
+            T1(i,j) = A1(i,j);
+        }
+    }
+		
+	float alpha = 1;
+    float beta = 0; 
+	Tensor<float> Temp(P,J,K);
+    Temp.generate([](){ return randomReal<float>(); });
+	Tensor<float> Y(P,Q,K);
+    Y.generate([](){ return randomReal<float>(); });
+	contract(alpha,T,{'i','j','k'},T1,{'i','p'},beta,Temp,{'p','j','k'});
+    contract(alpha,Temp,{'p','j','k'},T2,{'j','q'},beta,Y,{'p','q','k'});
+	float Y_eigen[P*Q*K]; int idx =0;
+	for(int i=0; i<P; i++){
+       for(int j=0;j<Q;j++){
+	       for(int k = 0; k<K; k++){
+            Y_eigen[idx] = Y(i,j,k);
+            idx = idx+1;
+            }
+		}
+    }
+	float *Y_eigen_pointer = Y_eigen;
+  return Y_eigen_pointer;
+}
+
+
+int main()
+{
+   
+   const int I = 3;
+   const int J = 4;
+   const int K = 5;
+   const int Q = 3;const int P = 2; const int R = 4;
+  
+   float X[I*J*K];
+   for(int i=0; i<I*J*K; ++i){
+	   X[i] = rand()/(float)RAND_MAX;
+	   //cout << X[i] << endl;
+   }
+   float *X_pointer = X;
+   
+   Tensor<float> T(I,J,K); int idx = 0;
+   for(int i=0; i<I; i++){
+       for(int j=0;j<J;j++){
+           for(int k=0;k<K;k++){
+               T(i,j,k) = X[idx];
+               idx = idx+1;
+            }
+        }
+    }
+  //////////////////////////////////////////////////////////////////////////// 
+ ////////////////////////// Initial A1 A2 A3 ////////////////////////////////  
+ /////////////////////////////////////////////////////////////////////////////
+ /* reshape tensor T along different mode */
+   MatrixXf X1 = MatrixXf::Random(I,J*K);
+   MatrixXf X2 = MatrixXf::Random(J,I*K);
+   MatrixXf X3 = MatrixXf::Random(K,I*J);
+    
+ for(int i = 0; i<I; ++i){
+     float slice[I*J];int m = 0;
+     for(int ii = 0; ii<I*J; ++ii){
+       slice[m] = float(X[I*J*i+ii]);
+       // cout << slice[m] << endl;
+       m++;
+     }
+     MatrixXf test1 =  Map<MatrixXf,0, Stride<I,1> >(slice,I,J,Stride<I,1>(I,1));
+     // cout <<  test1 << endl;
+     X1.block<I,J>(0,J*i) =  test1;
+} 
+
+   for(int i = 0; i<K; ++i){
+     float slice[I*J];int m = 0;
+     for(int ii = 0; ii<I*J; ++ii){
+       slice[m] = float(X[I*J*i+ii]);
+       // cout << slice[m] << endl;
+       m++;
+     }
+     MatrixXf test2 =  Map<MatrixXf,0, Stride<1,I> >(slice,J,I,Stride<1,I>(1,I));
+     // cout <<  test << endl;
+     X2.block<J,I>(0,I*i) =  test2;
+} 
+
+   for(int i = 0; i<J; ++i){
+     float slice[I*K];int m = 0;
+     for(int ii = 0; ii<K; ++ii){
+       for (int jj = 0; jj<I; ++jj){
+       slice[m] = float(X[I*i+I*J*ii+jj]);
+        cout << slice[m] << endl;
+       m++;
+       }
+     }
+      MatrixXf test3 =  Map<MatrixXf,0, Stride<1,I> >(slice,K,I,Stride<1,I>(1,I));
+     X3.block<K,I>(0,I*i) =  test3;
+} 
+
+ /*initialize A1, A2, A3 */
+   MatrixXf A1 = MatrixXf::Zero(I,P);
+   MatrixXf A2 = MatrixXf::Zero(J,Q);
+   MatrixXf A3 = MatrixXf::Zero(K,R);
+   
+   JacobiSVD<MatrixXf> svd1(X1,ComputeThinU);
+   const Eigen::MatrixXf U1 = svd1.matrixU();
+   A1 = U1.block<I,P>(0,0);
+   
+   JacobiSVD<MatrixXf> svd2(X2,ComputeThinU);
+   const Eigen::MatrixXf U2 = svd2.matrixU();
+   A2 = U2.block<J,Q>(0,0);
+   
+   JacobiSVD<MatrixXf> svd3(X3,ComputeThinU);
+   const Eigen::MatrixXf U3 = svd3.matrixU();
+   A3 = U3.block<K,R>(0,0);
+   cout << A1 << endl;
+   cout << A2 << endl;
+   cout << A3 << endl;
+   
+  ///////////////////////////////////////////////////////////////////////////// 
+  //////////////////////////////////////////////////////////////////////////////
+  //////////////////////////Using BTAS to do Tensor Contraction ////////////////////
+  MatrixXf Y1 = MatrixXf::Random(I,Q*R);
+  MatrixXf Y2 = MatrixXf::Random(J,P*R);
+  MatrixXf Y3 = MatrixXf::Random(K,P*Q);
+  float *Y1_eigen;
+  float *Y2_eigen;
+  float *Y3_eigen;
+for (int iter = 0; iter <20; iter++){  
+  cout << "iter no:" << iter <<endl;
+  Y1_eigen = BTAS_Contract1(T,A2,A3,I,J,K,Q,R);
+	for(int i = 0; i<I; ++i){
+     float slice[I*Q];int m = 0;
+     for(int ii = 0; ii<I*Q; ++ii){
+       slice[m] = float(Y1_eigen[I*Q*i+ii]);
+       // cout << slice[m] << endl;
+       m++;
+     }
+     MatrixXf test1 =  Map<MatrixXf,0, Stride<I,1> >(slice,I,Q,Stride<I,1>(I,1));
+     // cout <<  test1 << endl;
+     Y1.block<I,Q>(0,Q*i) =  test1;
+} 
+	cout << "Y1 is:"<<endl; 
+cout << Y1 << endl;
+ 
+ JacobiSVD<MatrixXf> svda1(Y1,ComputeThinU);
+ const Eigen::MatrixXf Ua1 = svda1.matrixU();
+ A1 = Ua1.block<I,P>(0,0);
+ cout << "A1 IS:"<<endl;
+ cout << A1 << endl;
+////////////////////////////////////////////////////////////////////////////////////////////   
+
+  Y2_eigen = BTAS_Contract2(T,A1,A3,I,J,K,P,R);
+	for(int i = 0; i<R; ++i){
+     float slice[P*J];int m = 0;
+     for(int ii = 0; ii<P*J; ++ii){
+       slice[m] = float(Y2_eigen[P*J*i+ii]);
+       // cout << slice[m] << endl;
+       m++;
+     }
+     MatrixXf test2 =  Map<MatrixXf,0, Stride<1,P> >(slice,J,P,Stride<1,P>(1,P));
+     // cout <<  test << endl;
+     Y2.block<J,P>(0,P*i) =  test2;
+} 
+	cout <<"Y2 is:"<<endl;  
+cout<< Y2 << endl;
+  JacobiSVD<MatrixXf> svda2(Y2,ComputeThinU);
+   const Eigen::MatrixXf Ua2 = svda2.matrixU();
+   A2 = Ua2.block<J,Q>(0,0);
+   cout << "A2 IS:"<<endl;
+   cout << A2 <<endl;
+/////////////////////////////////////////////////////////////////////////////////////////////
+
+  Y3_eigen = BTAS_Contract3(T,A1,A2,I,J,K,P,Q);
+   for(int i = 0; i<Q; ++i){
+     float slice[P*K];int m = 0;
+     for(int ii = 0; ii<K; ++ii){
+       for (int jj = 0; jj<P; ++jj){
+       slice[m] = float(Y3_eigen[P*i+P*Q*ii+jj]);
+       // cout << slice[m] << endl;
+       m++;
+       }
+     }
+      MatrixXf test3 =  Map<MatrixXf,0, Stride<1,P> >(slice,K,P,Stride<1,P>(1,P));
+      // cout <<  test << endl;
+     Y3.block<K,P>(0,P*i) =  test3;
+} 
+   cout << "Y3 IS:" << endl;    
+cout<< Y3 << endl;
+
+   JacobiSVD<MatrixXf> svda3(X3,ComputeThinU);
+   const Eigen::MatrixXf Ua3 = svda3.matrixU();
+   A3 = Ua3.block<K,R>(0,0);
+   cout <<"A3 IS:"<<endl;
+   cout << A3 <<endl;	
+	
+	
+	}
+ ///////////////////////////////////////////////////////////////////////
+///////////////////// UPDATE G //////////////////////////////////////// 
+   
+	 Tensor<float> A(I,P); 
+   for(int i=0; i<I; i++){
+       for(int j=0;j<P;j++){
+               A(i,j) = A1(i,j);
+        }
+    }
+	
+	 Tensor<float> B(J,Q); 
+   for(int i=0; i<J; i++){
+       for(int j=0;j<Q;j++){
+               B(i,j) = A2(i,j);
+        }
+    }
+	 Tensor<float> C(K,R); 
+   for(int i=0; i<K; i++){
+     for(int j=0;j<R;j++){
+               C(i,j) = A3(i,j);
+        }
+    }
+	
+   float alpha = 1;
+   float beta = 0;
+	Tensor<float> Temp1(I,J,R);
+    Temp1.generate([](){ return randomReal<float>(); });
+	Tensor<float> Temp2(I,Q,R);
+    Temp2.generate([](){ return randomReal<float>(); });
+	
+	Tensor<float> G(P,Q,R);
+    G.generate([](){ return randomReal<float>(); });
+	contract(alpha,T,{'i','j','k'},C,{'k','r'},beta,Temp1,{'i','j','r'});
+    contract(alpha,Temp1,{'i','j','r'},B,{'j','q'},beta,Temp2,{'i','q','r'});
+	contract(alpha,Temp2,{'i','q','r'},C,{'i','p'},beta,G,{'p','q','r'});
+	
+	
+   /* Tensor<float> T(I,J,K); int idx = 0;
+   for(int i=0; i<I; i++){
+       for(int j=0;j<J;j++){
+           for(int k=0;k<K;k++){
+               T(i,j,k) = X[idx];
+               idx = idx+1;
+            }
+        }
+    }
+  
+     Tensor<float> T1(I,P); 
+   for(int i=0; i<I; i++){
+       for(int j=0;j<P;j++){
+               T1(i,j) = A1(i,j);
+        }
+    }
+	
+	 Tensor<float> T2(J,Q); idx = 0;
+   for(int i=0; i<J; i++){
+       for(int j=0;j<I*K;j++){
+               T2(i,j) = A2(i,j);
+               idx = idx+1;
+        }
+    }
+   
+   	 Tensor<float> T3(K,R); idx = 0;
+   for(int i=0; i<K; i++){
+       for(int j=0;j<I*J;j++){
+            T3(i,j) = A3(i,j);
+            idx = idx+1;
+        }
+    }
+	
+	float alpha = 1;
+    float beta = 0; 
+	Tensor<float> Temp(I,Q,K);
+    Temp.generate([](){ return randomReal<float>(); });
+	Tensor<float> Y(I,Q,R);
+    Y.generate([](){ return randomReal<float>(); });
+	//std::chrono::duration<double>* tic_toc1 = new std::chrono::duration<double>[4];
+	//std::chrono::duration<double>* tic_toc2 = new std::chrono::duration<double>[4];
+    contract(alpha,T,{'i','j','k'},T2,{'j','q'},beta,Temp,{'i','q','k'});
+    contract(alpha,Temp,{'i','q','k'},T3,{'k','r'},beta,Y,{'i','q','r'});
+	float Y_eigen[I*Q,R]; idx =0;
+	for(int i=0; i<I; i++){
+       for(int j=0;j<Q;j++){
+	       for(int k = 0; k<R; k++){
+            Y_eigen[idx] = Y(i,j,k);
+            idx = idx+1;
+            }
+		}
+    }
+	
+	
+	*/
+	
+	
+	
+	
+	/*
+   MatrixXf A1 = MatrixXf::Zero(I,P);
+   MatrixXf A2 = MatrixXf::Zero(J,Q);
+   MatrixXf A3 = MatrixXf::Zero(K,R);
+   
+   SVD<MatrixXf> svdOfX1(X1);
+   const Eigen::MatrixXf U1 = svdOfX1.matrixV();
+   A1 = U1.block<I,P>(0,0);
+   
+   SVD<MatrixXf> svdOfX2(X2);
+   const Eigen::MatrixXf U2 = svdOfX2.matrixV();
+   A2 = U2.block<J,Q>(0,0);
+   
+   SVD<MatrixXf> svdOfX3(X3);
+   const Eigen::MatrixXf U3 = svdOfX3.matrixV();
+   A3 = U3.block<K,R>(0,0);
+   
+   */
+   
+   
+   
+   
+   
+   
+/*
+   std::cout << "Matrix U is:" << std::endl << std::endl << U1 << std::endl << std::endl;
+   
+   std::cout << "Matrix V is:" << std::endl << std::endl << U2 << std::endl << std::endl;
+   std::cout << "Matrix S is:" << std::endl << std::endl << U3<< std::endl << std::endl;
+   std::cout << "Vector x is:" << std::endl << std::endl << A1 << std::endl << std::endl;
+   std::cout << "Vector b is:" << std::endl << std::endl << A2 << std::endl << std::endl;
+   std::cout << "Vector b is:" << std::endl << std::endl << A3 << std::endl << std::endl;
+   */
+  
+   
+ 
+   
+   
+   return 0;
+}

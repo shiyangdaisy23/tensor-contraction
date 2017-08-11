@@ -1,0 +1,8 @@
+#include "/home/yang/btas_test_2/ctf-master/include/ctf.hpp"
+
+using namespace CTF;
+
+int main()
+{
+  // Tensor<>(3,{2,3,4},{NS,NS,NS});
+}

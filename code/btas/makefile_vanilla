@@ -1,0 +1,13 @@
+CXX=g++
+INCLUDES=-I/home/yang/BTAS/
+FLAGS=-std=c++11
+PROG=btas_test_1_01
+
+btas_test_1_01: btas_test_1_01.cpp
+	$(CXX) $(INCLUDES) $(FLAGS) btas_test_1_01.cpp -o $(PROG)
+
+clean:
+	rm $(PROG) *.txt *~
+
+run:
+	nohup ./$(PROG) > out.txt & 
